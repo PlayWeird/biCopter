@@ -18,7 +18,7 @@ class SimWindow(pyglet.window.Window):
         super(SimWindow, self).__init__(800, 600)
         self.sim_dt = 1.0 / 60.0
         self.pixels_per_meter = 200.0
-        self.copter = Copter(q = np.matrix([0.0, 0.0, 0.0]).T)
+        self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T)
 
     def my_tick(self, dt):
         self.clear()
@@ -68,7 +68,6 @@ class Copter():
 
         effort[1], effort[2] = F, torque
 
-
         # Defined from Body Frame
         q_b_dot_dot = np.matmul(np.linalg.inv(self.M), effort)
 
@@ -108,7 +107,7 @@ class Copter():
         glPopMatrix()
 
         # draw center of mass
-        glPushMatrix
+        glPushMatrix()
         self.draw_mass_helper(True)
         glRotatef(90, 0, 0, 1)
         self.draw_mass_helper(False)
@@ -116,6 +115,7 @@ class Copter():
         self.draw_mass_helper(True)
         glRotatef(90, 0, 0, 1)
         self.draw_mass_helper(False)
+        glPopMatrix()
         glPopMatrix()
 
     def draw_mass_helper(self, black):
@@ -146,19 +146,24 @@ class Copter():
 
         # draw prop pin
 
+        pin_width = 0.005
+        pin_height = 0.05
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
-                             ('v2f', [-.005, self.motor_size,
-                                      .005, self.motor_size,
-                                      .005, self.motor_size + .05,
-                                      -.005, self.motor_size + .05]),
+                             ('v2f', [-pin_width, self.motor_size,
+                                      pin_width, self.motor_size,
+                                      pin_width, self.motor_size + pin_height,
+                                      -pin_width, self.motor_size + pin_height]),
                              ('c3B', [0, 0, 0] * 4)
                              )
 
+        # draw prop
+        prop_height = 0.01
+        prop_offset = 0.03
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
-                             ('v2f', [-self.prop_length, self.motor_size + .03,
-                                      self.prop_length, self.motor_size + .03,
-                                      self.prop_length, self.motor_size + .04,
-                                      -self.prop_length, self.motor_size + .04]),
+                             ('v2f', [-self.prop_length, self.motor_size + prop_offset,
+                                      self.prop_length, self.motor_size + prop_offset,
+                                      self.prop_length, self.motor_size + prop_offset + prop_height,
+                                      -self.prop_length, self.motor_size + prop_offset + prop_height]),
                              ('c3B', [255, 0, 0] * 4)
                              )
 
