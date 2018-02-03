@@ -31,7 +31,7 @@ class SimWindow(pyglet.window.Window):
         glPopMatrix()
 
 
-class Copter():
+class Copter:
     def __init__(self, body_length=0.25, mass=50.0, q=np.zeros((3, 1), np.float64)):
         # Appearance Variables
         self.body_length = body_length
@@ -46,14 +46,22 @@ class Copter():
         self.Icm = (self.mass * self.body_length * 2.0) / 12.0
         self.prop_conversion_factor = 2.0
         self.gravity = -9.8
+
+        # These prop speeds perfectly counter gravity.
         self.prop_speeds = (sqrt(-self.gravity * self.mass / (2 * self.prop_conversion_factor)),
                             sqrt(-self.gravity * self.mass / (2. * self.prop_conversion_factor)))
-        # self.prop_speeds = (0,0)
 
+        # Generalized mass matrix.
         self.M = np.matrix([
             [self.mass, 0, 0],
             [0, self.mass, 0],
             [0, 0, self.Icm]])
+
+        # Maps squared prop speeds to force in body frame.
+        self.H = np.matrix([[0.0, 0.0],
+                       [self.prop_conversion_factor, self.prop_conversion_factor],
+                       [-self.body_length * self.prop_conversion_factor,
+                        self.body_length * self.prop_conversion_factor]])
 
         self.pid = PidController((10.0, 1.0, 10.0), (0.0, 0.0), (self.gravity, 20.0))
         self.start_time = time.time()
@@ -64,16 +72,13 @@ class Copter():
                           [-s, c, 0],
                           [0, 0, 1]])
 
-        # Calculate Translational Accelerations
-        effort = np.zeros((3, 1))
-        prop_thrust = [self.prop_conversion_factor * vi * vi for vi in self.prop_speeds]
-        torque = (prop_thrust[1] - prop_thrust[0]) * self.body_length
-        F = sum(prop_thrust)
+        prop_speed_squared = [vi * vi for vi in self.prop_speeds]
+        c = np.asarray(prop_speed_squared).reshape((2, 1))
 
-        effort[1], effort[2] = F, torque
+        F = np.matmul(self.H, c)
 
         # Defined from Body Frame
-        q_b_dot_dot = np.matmul(np.linalg.inv(self.M), effort)
+        q_b_dot_dot = np.matmul(np.linalg.inv(self.M), F)
 
         # Force of gravity from vehicle frame
         g_v = np.matrix([0, self.gravity, 0]).T
@@ -86,7 +91,7 @@ class Copter():
         self.q += self.q_dot * dt
 
     def control_update(self, dt):
-        target_altitude = 1.5  # * sin(time.time() - self.start_time)
+        target_altitude = -1.9 * sin(time.time() - self.start_time)
         self.draw_box(target_altitude)
 
         measurement = self.q[1]
@@ -182,7 +187,7 @@ class Copter():
 
     # draw target
     def draw_box(self, height):
-        height / 200
+        height = height / 2
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
                              ('v2f', [-10, height,
                                       -10, height - 0.01,
@@ -218,6 +223,7 @@ class PidController():
         effort = max(min(effort, self.max_effort), self.min_effort)
 
         return effort
+
 
 if __name__ == '__main__':
     main()
