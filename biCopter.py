@@ -25,7 +25,8 @@ class SimWindow(pyglet.window.Window):
         glPushMatrix()
         glTranslatef(self.width / 2.0, self.height / 2.0, 0)
         glScalef(self.pixels_per_meter, self.pixels_per_meter, self.pixels_per_meter)
-        self.copter.update(dt)
+        self.copter.control_update(dt)
+        self.copter.physics_update(dt)
         self.copter.draw()
         glPopMatrix()
 
@@ -54,7 +55,10 @@ class Copter():
             [0, self.mass, 0],
             [0, 0, self.Icm]])
 
-    def update(self, dt):
+        self.pid = PidController((10.0, 1.0, 10.0), (0.0, 0.0), (self.gravity, 20.0))
+        self.start_time = time.time()
+
+    def physics_update(self, dt):
         c, s = cos(self.q[2]), sin(self.q[2])
         Rvb = np.asarray([[c, s, 0],
                           [-s, c, 0],
@@ -80,6 +84,16 @@ class Copter():
 
         self.q_dot += q_v_dot_dot * dt
         self.q += self.q_dot * dt
+
+    def control_update(self, dt):
+        target_altitude = 1.5  # * sin(time.time() - self.start_time)
+        self.draw_box(target_altitude)
+
+        measurement = self.q[1]
+        effort = self.pid.get_effort(target_altitude, measurement, dt)
+        base_speed = sqrt(-self.gravity * self.mass / (2 * self.prop_conversion_factor))
+        prop_speed = base_speed + effort
+        self.prop_speeds = (prop_speed, prop_speed)
 
     def draw(self):
         # Translate coordinates to center
@@ -145,7 +159,6 @@ class Copter():
                              )
 
         # draw prop pin
-
         pin_width = 0.005
         pin_height = 0.05
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
@@ -167,6 +180,44 @@ class Copter():
                              ('c3B', [255, 0, 0] * 4)
                              )
 
+    # draw target
+    def draw_box(self, height):
+        height / 200
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                             ('v2f', [-10, height,
+                                      -10, height - 0.01,
+                                      10, height - 0.01,
+                                      10, height]),
+                             ('c3B', [255, 229, 0] * 4)
+                             )
+
+
+class PidController():
+    def __init__(self, gains=(0.0, 0.0, 0.0),
+                 initial_condition=(0.0, 0.0),
+                 effort_bounds=(0.0, 0.0),
+                 integral_threshold=0.25):
+        self.k_p, self.k_i, self.k_d = gains
+        self.e_prev, self.i_prev = initial_condition
+        self.min_effort, self.max_effort = effort_bounds
+        self.integration_threshold = integral_threshold
+
+    def get_effort(self, target, measurement, dt):
+        e = target - measurement
+        p = e
+        i = self.i_prev + ((e + self.e_prev) * dt / 2.0)
+        d = (e - self.e_prev) / dt
+
+        if not (-self.integration_threshold < e < self.integration_threshold):
+            i = 0.0
+
+        self.e_prev = e
+        self.i_prev = i
+
+        effort = self.k_p * p + self.k_i * i + self.k_d * d
+        effort = max(min(effort, self.max_effort), self.min_effort)
+
+        return effort
 
 if __name__ == '__main__':
     main()
