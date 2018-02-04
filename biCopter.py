@@ -13,6 +13,10 @@ def main():
     pyglet.app.run()
 
 
+# Class that defines what gets calculated every pyglet dt
+# sim_dt = number of loops per second
+# pixels_per_meter = space representation conversion factor
+# copter = instance of a vehicle in the simulation.
 class SimWindow(pyglet.window.Window):
     def __init__(self):
         super(SimWindow, self).__init__(800, 600)
@@ -59,9 +63,9 @@ class Copter:
 
         # Maps squared prop speeds to force in body frame.
         self.H = np.matrix([[0.0, 0.0],
-                       [self.prop_conversion_factor, self.prop_conversion_factor],
-                       [-self.body_length * self.prop_conversion_factor,
-                        self.body_length * self.prop_conversion_factor]])
+                            [self.prop_conversion_factor, self.prop_conversion_factor],
+                            [-self.body_length * self.prop_conversion_factor,
+                             self.body_length * self.prop_conversion_factor]])
 
         self.pid = PidController((10.0, 1.0, 10.0), (0.0, 0.0), (self.gravity, 20.0))
         self.start_time = time.time()
