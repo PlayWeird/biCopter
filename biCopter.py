@@ -22,8 +22,9 @@ class SimWindow(pyglet.window.Window):
         super(SimWindow, self).__init__(800, 600)
         self.sim_dt = 1.0 / 60.0
         self.pixels_per_meter = 200.0
-        self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T)
+        self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T, scale_factor=self.pixels_per_meter)
 
+    # Runs every frame at rate dt
     def my_tick(self, dt):
         self.clear()
         glPushMatrix()
@@ -36,13 +37,13 @@ class SimWindow(pyglet.window.Window):
 
 
 class Copter:
-    def __init__(self, body_length=0.25, mass=50.0, q=np.zeros((3, 1), np.float64)):
+    def __init__(self, body_length=0.25, mass=50.0, q=np.zeros((3, 1), np.float64), scale_factor=200):
         # Appearance Variables
         self.body_length = body_length
-        self.body_height = 5.0 / 200.0
-        self.motor_size = 15.0 / 200.0
-        self.prop_length = 25.0 / 200.0
-        self.mass_radius = 11.0 / 200.0
+        self.body_height = 5.0 / scale_factor
+        self.motor_size = 15.0 / scale_factor
+        self.prop_length = 25.0 / scale_factor
+        self.mass_radius = 11.0 / scale_factor
         # Physics Variables
         self.mass = mass
         self.q = q  # Vehicle frame
