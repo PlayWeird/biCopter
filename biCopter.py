@@ -94,6 +94,9 @@ class Copter:
         self.q_dot += q_v_dot_dot * dt
         self.q += self.q_dot * dt
 
+    def vertical_control_helper(self, ):
+        pass
+
     def control_update(self, dt):
         target_altitude = -1.9 * sin(time.time() - self.start_time)
         self.draw_box(target_altitude)
