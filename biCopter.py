@@ -19,7 +19,7 @@ def main():
 # copter = instance of a vehicle in the simulation.
 class SimWindow(pyglet.window.Window):
     def __init__(self):
-        super(SimWindow, self).__init__(800, 600)
+        super(SimWindow, self).__init__(1080, 800)
         self.sim_dt = 1.0 / 60.0
         self.pixels_per_meter = 200.0
         self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T)
@@ -76,7 +76,7 @@ class Copter:
         self.vertical_pid = PidController((10.0, 1.0, 1.0), effort_bounds=(self.gravity, 5.0))
         self.horizontal_pid = PidController((40.0, 1.0, 20.0), effort_bounds=(-800.0, 800.0))
         self.start_time = time.time()
-        self.use_pid = False
+        self.use_pid = True
 
     def physics_update(self, dt):
         c, s = cos(self.q[2]), sin(self.q[2])
@@ -104,7 +104,7 @@ class Copter:
 
     def control_update(self, dt):
         target_altitude = 2.0 * sin(time.time() - self.start_time)
-        target_x = 1.5* sin(0.5*time.time() - self.start_time)
+        target_x = 1.5 * sin(0.95*time.time() - self.start_time)
         self.draw_target(target_x, target_altitude)
 
         total_thrust = self.vertical_control_helper(target_altitude, dt)
@@ -134,7 +134,7 @@ class Copter:
 
         if self.use_pid:
             desired_velocity = self.horizontal_pid.get_effort(target_position_x, self.q[0], dt)
-            desired_velocity = np.clip(desired_velocity, -1.0, 1.0)
+            desired_velocity = np.clip(desired_velocity, -2.0, 2.0)
         else:
             desired_velocity = self.get_desired_velocity(target_position_x, self.q[0], 0.5)
 
@@ -181,11 +181,11 @@ class Copter:
         # draw motors
         glPushMatrix()
         glTranslatef(self.body_length, self.body_height, 0)
-        self.draw_motor()
+        self.draw_motor(0)
         glPopMatrix()
         glPushMatrix()
         glTranslatef(-self.body_length, self.body_height, 0)
-        self.draw_motor()
+        self.draw_motor(1)
         glPopMatrix()
 
         # draw center of mass
@@ -216,7 +216,9 @@ class Copter:
                              ('c3B', color * 5)
                              )
 
-    def draw_motor(self):
+    def draw_motor(self, index):
+        self.draw_thrust_vector(index)
+
         # draw motor box
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
                              ('v2f', [-self.motor_size / 2.0, 0,
@@ -246,6 +248,34 @@ class Copter:
                                       self.prop_length, self.motor_size + prop_offset + prop_height,
                                       -self.prop_length, self.motor_size + prop_offset + prop_height]),
                              ('c3B', [255, 0, 0] * 4)
+                             )
+
+    def draw_thrust_vector(self, index):
+        prop_speed = self.prop_speeds[index]
+        thrust = self.prop_conversion_factor*prop_speed*prop_speed
+        vector_length = thrust / (200.0 * 2)
+        vector_width = 0.01
+        arrow_tip_size = 0.05
+        arrow_color = [120, 40, 160]
+
+        # Draw body of arrow
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                             ('v2f', [-vector_width / 2.0, 0.0,
+                                      vector_width / 2.0, 0.0,
+                                      vector_width / 2.0, vector_length,
+                                      -vector_width / 2.0, vector_length
+                                      ]),
+                             ('c3B', arrow_color * 4)
+                             )
+
+        # Draw tip of arrow
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                             ('v2f', [-arrow_tip_size / 2.0, vector_length,
+                                      arrow_tip_size / 2.0, vector_length,
+                                      0.0, arrow_tip_size + vector_length,
+                                      0.0, arrow_tip_size + vector_length
+                                      ]),
+                             ('c3B', arrow_color * 4)
                              )
 
     # draw target
