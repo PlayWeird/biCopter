@@ -1,7 +1,7 @@
 import pyglet
 from pyglet.gl import *
 import math
-from math import cos, sin, pi, sqrt
+from math import cos, sin, asin, pi, sqrt
 import numpy as np
 import time
 
@@ -22,7 +22,7 @@ class SimWindow(pyglet.window.Window):
         super(SimWindow, self).__init__(800, 600)
         self.sim_dt = 1.0 / 60.0
         self.pixels_per_meter = 200.0
-        self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T, scale_factor=self.pixels_per_meter)
+        self.copter = Copter(q=np.matrix([0.0, 0.0, 0.0]).T)
 
     # Runs every frame at rate dt
     def my_tick(self, dt):
@@ -37,13 +37,13 @@ class SimWindow(pyglet.window.Window):
 
 
 class Copter:
-    def __init__(self, body_length=0.25, mass=50.0, q=np.zeros((3, 1), np.float64), scale_factor=200):
+    def __init__(self, body_length=0.25, mass=50.0, q=np.zeros((3, 1), np.float64)):
         # Appearance Variables
         self.body_length = body_length
-        self.body_height = 5.0 / scale_factor
-        self.motor_size = 15.0 / scale_factor
-        self.prop_length = 25.0 / scale_factor
-        self.mass_radius = 11.0 / scale_factor
+        self.body_height = 0.025
+        self.motor_size = .075
+        self.prop_length = .125
+        self.mass_radius = .055
         # Physics Variables
         self.mass = mass
         self.q = q  # Vehicle frame
@@ -56,7 +56,7 @@ class Copter:
         self.prop_speeds = (sqrt(-self.gravity * self.mass / (2 * self.prop_conversion_factor)),
                             sqrt(-self.gravity * self.mass / (2. * self.prop_conversion_factor)))
 
-        # Generalized mass matrix.
+        # Generalized mass matrix (encapsulates mass and inertia.
         self.M = np.matrix([
             [self.mass, 0, 0],
             [0, self.mass, 0],
@@ -68,8 +68,15 @@ class Copter:
                             [-self.body_length * self.prop_conversion_factor,
                              self.body_length * self.prop_conversion_factor]])
 
-        self.pid = PidController((10.0, 1.0, 10.0), (0.0, 0.0), (self.gravity, 20.0))
+        # Maps control inputs into bodyframe forces
+        self.h = np.matrix([[self.prop_conversion_factor, self.prop_conversion_factor],
+                            [-self.body_length * self.prop_conversion_factor,
+                             self.body_length * self.prop_conversion_factor]])
+
+        self.vertical_pid = PidController((10.0, 1.0, 1.0), effort_bounds=(self.gravity, 5.0))
+        self.horizontal_pid = PidController((40.0, 1.0, 20.0), effort_bounds=(-800.0, 800.0))
         self.start_time = time.time()
+        self.use_pid = False
 
     def physics_update(self, dt):
         c, s = cos(self.q[2]), sin(self.q[2])
@@ -95,18 +102,66 @@ class Copter:
         self.q_dot += q_v_dot_dot * dt
         self.q += self.q_dot * dt
 
-    def vertical_control_helper(self, ):
-        pass
-
     def control_update(self, dt):
-        target_altitude = -1.9 * sin(time.time() - self.start_time)
-        self.draw_box(target_altitude)
+        target_altitude = 2.0 * sin(time.time() - self.start_time)
+        target_x = 1.5* sin(0.5*time.time() - self.start_time)
+        self.draw_target(target_x, target_altitude)
 
-        measurement = self.q[1]
-        effort = self.pid.get_effort(target_altitude, measurement, dt)
-        base_speed = sqrt(-self.gravity * self.mass / (2 * self.prop_conversion_factor))
-        prop_speed = base_speed + effort
-        self.prop_speeds = (prop_speed, prop_speed)
+        total_thrust = self.vertical_control_helper(target_altitude, dt)
+        torque = self.horizontal_control_helper(target_x, total_thrust, dt)
+        effort = np.asarray([total_thrust, torque]).reshape((2, 1))
+        prop_speeds_squared = np.matmul(np.linalg.inv(self.h), effort)
+        prop_speeds_squared = np.clip(prop_speeds_squared, 0.0, None)
+        self.prop_speeds = np.sqrt(prop_speeds_squared)
+
+    def vertical_control_helper(self, target_altitude, dt):
+        # Function Variables
+        if self.use_pid:
+            desired_vertical_velocity = self.vertical_pid.get_effort(target_altitude, self.q[1], dt)
+            desired_vertical_velocity = np.clip(desired_vertical_velocity, -1.5, 1.5)
+        else:
+            desired_vertical_velocity = self.get_desired_velocity(target_altitude, self.q[1], attraction_strength=3.7)
+
+
+        delta_desired_velocity = desired_vertical_velocity - self.q_dot[1]
+        c = cos(self.q[2])
+
+        # Calculation
+        desired_thrust = self.mass * ((delta_desired_velocity / dt) - self.gravity) / c
+        return desired_thrust
+
+    def horizontal_control_helper(self, target_position_x, force, dt):
+
+        if self.use_pid:
+            desired_velocity = self.horizontal_pid.get_effort(target_position_x, self.q[0], dt)
+            desired_velocity = np.clip(desired_velocity, -1.0, 1.0)
+        else:
+            desired_velocity = self.get_desired_velocity(target_position_x, self.q[0], 0.5)
+
+        desired_acceleration = self.get_desired_acceleration(desired_velocity, self.q_dot[0], 0.5)
+        force_ratio = -desired_acceleration * self.mass / force
+        bounded_force_ratio = max(min(force_ratio, 1.0), -1.0)
+        desired_theta = asin(bounded_force_ratio)
+        desired_angular_velocity = self.get_desired_velocity(desired_theta, self.q[2], 2.0)
+        desired_angular_acceleration = self.get_desired_acceleration(desired_angular_velocity, self.q_dot[2], 10.0)
+        desired_torque = desired_angular_acceleration * self.Icm
+        return desired_torque
+
+    def get_prop_speed_for_thrust(self, force):
+        if force <= 0.0:
+            return 0.0
+        omega = sqrt(force / self.prop_conversion_factor)
+        return omega
+
+    def get_desired_acceleration(self, target, current, attraction_strength=1.0):
+        delta = target - current
+        acceleration = delta * attraction_strength
+        return acceleration
+
+    def get_desired_velocity(self, target, current, attraction_strength=1.0):
+        delta = target - current
+        velocity = delta * attraction_strength
+        return velocity
 
     def draw(self):
         # Translate coordinates to center
@@ -194,28 +249,32 @@ class Copter:
                              )
 
     # draw target
-    def draw_box(self, height):
-        height = height / 2
+    def draw_target(self, target_x_position, target_y_position):
+        target_y_position = target_y_position / 2.0
+        target_x_position = target_x_position / 2.0
+        size = 0.1
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
-                             ('v2f', [-10, height,
-                                      -10, height - 0.01,
-                                      10, height - 0.01,
-                                      10, height]),
+                             ('v2f', [target_x_position + size, target_y_position,
+                                      target_x_position + size, target_y_position - size,
+                                      target_x_position, target_y_position - size,
+                                      target_x_position, target_y_position]),
                              ('c3B', [45, 29, 250] * 4)
                              )
 
 
 class PidController():
     def __init__(self, gains=(0.0, 0.0, 0.0),
-                 initial_condition=(0.0, 0.0),
                  effort_bounds=(0.0, 0.0),
                  integral_threshold=0.25):
         self.k_p, self.k_i, self.k_d = gains
-        self.e_prev, self.i_prev = initial_condition
+        self.e_prev, self.i_prev = None, 0.0
         self.min_effort, self.max_effort = effort_bounds
         self.integration_threshold = integral_threshold
 
     def get_effort(self, target, measurement, dt):
+        if self.e_prev is None:
+            self.e_prev = target - measurement
+
         e = target - measurement
         p = e
         i = self.i_prev + ((e + self.e_prev) * dt / 2.0)
