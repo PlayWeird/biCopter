@@ -43,7 +43,7 @@ class SimWindow(pyglet.window.Window):
 
 
 class Copter:
-    def __init__(self, id, body_length=0.25, mass=100.0, q=np.zeros((3, 1), np.float64)):
+    def __init__(self, id, body_length=0.25, mass=20.0, q=np.zeros((3, 1), np.float64)):
         self.id = id
         self.target_alt = random.gauss(0.0, 2.0)
         self.target_x = random.gauss(0.0, 2.0)
@@ -82,9 +82,9 @@ class Copter:
                             [-self.body_length * self.prop_conversion_factor,
                              self.body_length * self.prop_conversion_factor]])
 
-        self.vertical_pid = PidController((0.00001, 100.0, 1.0), effort_bounds=(self.gravity, 5.0))
-        self.horizontal_pid = PidController((20.0, 0.0, 10.0), effort_bounds=(-1000.0, 1000.0))
-        self.angular_pid = PidController((90.0, 0.0, 40.0), effort_bounds=(-8000.0, 8000.0))
+        self.vertical_pid = PidController((2.0, 0.01, 1.0), effort_bounds=(self.gravity, 5.0), integral_threshold=0.9)
+        self.horizontal_pid = PidController((5.0, 0.0, 3.0), effort_bounds=(-1000.0, 1000.0))
+        self.angular_pid = PidController((300.0, 0.0, 20.0), effort_bounds=(-8000.0, 8000.0))
         self.start_time = time.time()
         self.use_pid = True
 
@@ -127,7 +127,7 @@ class Copter:
 
     def vertical_control_helper(self, target_altitude, dt):
         # Function Variables
-        if not self.use_pid:
+        if self.use_pid:
             desired_vertical_velocity = self.vertical_pid.get_effort(target_altitude, self.q[1], dt)
             desired_vertical_velocity = np.clip(desired_vertical_velocity, -1.5, 1.5)
         else:
