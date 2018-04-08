@@ -2,8 +2,7 @@ import random
 
 import pyglet
 from pyglet.gl import *
-import math
-from math import cos, sin, asin, pi, sqrt
+from math import cos, sin, asin, pi, sqrt, degrees
 import numpy as np
 import time
 
@@ -181,7 +180,7 @@ class Copter:
         # Translate coordinates to center
         glPushMatrix()
         glTranslatef(self.q[0] / 2.0, self.q[1] / 2.0, 0)
-        glRotatef(math.degrees(self.q[2]), 0, 0, 1)
+        glRotatef(degrees(self.q[2]), 0, 0, 1)
 
         # draw copter body
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
