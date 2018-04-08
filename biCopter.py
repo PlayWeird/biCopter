@@ -15,7 +15,7 @@ def main():
 
 
 # Class that defines what gets calculated every pyglet dt
-# sim_dt = number of loops per second
+# sim_dt = time between frames
 # pixels_per_meter = space representation conversion factor
 # copter = instance of a vehicle in the simulation.
 class SimWindow(pyglet.window.Window):
@@ -24,8 +24,9 @@ class SimWindow(pyglet.window.Window):
         self.sim_dt = 1.0 / 60.0
         self.pixels_per_meter = 200.0
         self.copters = []
+        # Allows multiple copter to be loaded at once
         for i in range(1):
-            self.copters.append(Copter(i, q=np.matrix([random.gauss(0.0, 2.0), random.gauss(0.0, 2.0), 0.0]).T))
+            self.copters.append(Copter(i, q=np.matrix([random.uniform(-4.0, 4.0), random.uniform(-4.0, 4.0), 0.0]).T))
 
     # Runs every frame at rate dt
     def my_tick(self, dt):
@@ -42,10 +43,10 @@ class SimWindow(pyglet.window.Window):
 
 
 class Copter:
-    def __init__(self, id, body_length=0.25, mass=20.0, q=np.zeros((3, 1), np.float64)):
-        self.id = id
-        self.target_alt = random.gauss(0.0, 2.0)
-        self.target_x = random.gauss(0.0, 2.0)
+    def __init__(self, copter_id, body_length=0.25, mass=20.0, q=np.zeros((3, 1))):
+        self.copter_id = copter_id
+        self.target_alt = random.uniform(-4.0, 4.0)
+        self.target_x = random.uniform(-4.0, 4.0)
         # Appearance Variables
         self.body_length = body_length
         self.body_height = 0.025
@@ -64,7 +65,7 @@ class Copter:
         self.prop_speeds = (sqrt(-self.gravity * self.mass / (2 * self.prop_conversion_factor)),
                             sqrt(-self.gravity * self.mass / (2. * self.prop_conversion_factor)))
 
-        # Generalized mass matrix (encapsulates mass and inertia.
+        # Generalized mass matrix (encapsulates mass and inertia.)
         self.M = np.matrix([
             [self.mass, 0, 0],
             [0, self.mass, 0],
@@ -76,7 +77,7 @@ class Copter:
                             [-self.body_length * self.prop_conversion_factor,
                              self.body_length * self.prop_conversion_factor]])
 
-        # Maps control inputs into bodyframe forces
+        # This matrix is used to compute the control inputs needed for a desired force vector.
         self.h = np.matrix([[self.prop_conversion_factor, self.prop_conversion_factor],
                             [-self.body_length * self.prop_conversion_factor,
                              self.body_length * self.prop_conversion_factor]])
@@ -84,7 +85,6 @@ class Copter:
         self.vertical_pid = PidController((2.0, 0.01, 1.0), effort_bounds=(self.gravity, 5.0), integral_threshold=0.9)
         self.horizontal_pid = PidController((5.0, 0.0, 3.0), effort_bounds=(-1000.0, 1000.0))
         self.angular_pid = PidController((300.0, 0.0, 20.0), effort_bounds=(-8000.0, 8000.0))
-        self.start_time = time.time()
         self.use_pid = True
 
     def physics_update(self, dt):
@@ -94,9 +94,10 @@ class Copter:
                           [0, 0, 1]])
 
         prop_speed_squared = [vi * vi for vi in self.prop_speeds]
-        c = np.asarray(prop_speed_squared).reshape((2, 1))
+        u = np.asarray(prop_speed_squared).reshape((2, 1))
 
-        F = np.matmul(self.H, c)
+        # Force vector resulting from control input u as seen in the body frame.
+        F = np.matmul(self.H, u)
 
         # Defined from Body Frame
         q_b_dot_dot = np.matmul(np.linalg.inv(self.M), F)
@@ -106,6 +107,7 @@ class Copter:
         g_b = np.matmul(Rvb, g_v)
 
         q_b_dot_dot += g_b
+        # Acceleration vector as seen from vehicle frame.
         q_v_dot_dot = np.matmul(Rvb.T, q_b_dot_dot)
 
         self.q_dot += q_v_dot_dot * dt
@@ -114,7 +116,6 @@ class Copter:
     def control_update(self, dt):
         target_altitude = self.target_alt
         target_x = self.target_x
-        self.draw_target(target_x, target_altitude)
 
         total_thrust = self.vertical_control_helper(target_altitude, dt)
         torque = self.horizontal_control_helper(target_x, total_thrust, dt)
@@ -135,7 +136,7 @@ class Copter:
         delta_desired_velocity = desired_vertical_velocity - self.q_dot[1]
         c = cos(self.q[2])
 
-        # Calculation
+        # Calculate the total desired thrust to achieve desired vertical velocity
         desired_thrust = self.mass * ((delta_desired_velocity / dt) - self.gravity) / c
         return desired_thrust
 
@@ -177,6 +178,10 @@ class Copter:
         return velocity
 
     def draw(self):
+
+        target_altitude = self.target_alt
+        target_x = self.target_x
+        self.draw_target(target_x, target_altitude)
         # Translate coordinates to center
         glPushMatrix()
         glTranslatef(self.q[0] / 2.0, self.q[1] / 2.0, 0)
@@ -305,7 +310,7 @@ class Copter:
                              )
 
 
-class PidController():
+class PidController:
     def __init__(self, gains=(0.0, 0.0, 0.0),
                  effort_bounds=(0.0, 0.0),
                  integral_threshold=0.25):
