@@ -41,7 +41,6 @@ class SimWindow(pyglet.window.Window):
             copter.draw()
         glPopMatrix()
 
-
 class Copter:
     def __init__(self, copter_id, body_length=0.25, mass=20.0, q=np.zeros((3, 1))):
         self.copter_id = copter_id
@@ -235,7 +234,6 @@ class Copter:
                              )
 
     def draw_motor(self, index):
-        self.draw_thrust_vector(index)
 
         # draw motor box
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
@@ -267,6 +265,8 @@ class Copter:
                                       -self.prop_length, self.motor_size + prop_offset + prop_height]),
                              ('c3B', [255, 0, 0] * 4)
                              )
+
+        self.draw_thrust_vector(index)
 
     def draw_thrust_vector(self, index):
         prop_speed = self.prop_speeds[index]
