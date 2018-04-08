@@ -4,7 +4,6 @@ import pyglet
 from pyglet.gl import *
 from math import cos, sin, asin, pi, sqrt, degrees
 import numpy as np
-import time
 
 
 def main():
